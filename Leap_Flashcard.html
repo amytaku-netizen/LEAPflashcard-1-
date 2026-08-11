@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leap Vocab Master Pro - ハイテク英単語フラッシュカード</title>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- FontAwesome & Google Fonts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <!-- SheetJS (Excel .xlsx 解析ライブラリ) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <style>
+        :root {
+            --font-sans: 'Outfit', 'Noto Sans JP', sans-serif;
+            --font-mono: 'Space Grotesk', monospace;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: #030712;
+            color: #f3f4f6;
+            overflow-x: hidden;
+        }
+
+        /* 3D Perspective & Flip */
+        .perspective-1000 { perspective: 1200px; }
+        .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .transition-transform-600 { transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0b0f19; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+
+        /* Ambient Glow & Animations */
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.05); }
+        }
+        .animate-pulse-glow { animation: pulseGlow 6s ease-in-out infinite; }
+
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+        .animate-float { animation: floatSlow 4s ease-in-out infinite; }
+
+        /* Glassmorphism Styles */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-card-back {
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(20, 14, 45, 0.9) 100%);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            box-shadow: 0 20px 50px rgba(124, 58, 237, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+
+        .neon-border-indigo {
+            box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.5);
+        }
+        .neon-border-emerald {
+            box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.5);
+        }
+        .neon-border-rose {
+            box-shadow: 0 0 25px -5px rgba(244, 63, 94, 0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-100 bg-[#030712] selection:bg-indigo-500 selection:text-white relative">
+
+    <!-- Background Ambient Lights -->
+    <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full filter blur-[120px] pointer-events-none animate-pulse-glow"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-cyan-600/15 rounded-full filter blur-[120px] pointer-events-none animate-pulse-glow" style="animation-delay: 3s;"></div>
+    <div class="fixed top-[40%] right-[30%] w-[350px] h-[350px] bg-purple-600/15 rounded-full filter blur-[100px] pointer-events-none"></div>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+        // Leap サンプル初期データ (20語)
+        const DEFAULT_CARDS = [
+            { id: 1, word: "agree", meaning: "[自] ①賛成する ②（主語の中で）意見が一致する ③（with ～）（気候，食べ物が）（～に）合う" },
+            { id: 2, word: "oppose", meaning: "[他] ～に反対する" },
+            { id: 3, word: "advise", meaning: "[他] ～に忠告する" },
+            { id: 4, word: "tip", meaning: "[名] ①助言，ヒント ②チップ ③（足や山などの）先，先端（いずれも〈可算〉）" },
+            { id: 5, word: "discuss", meaning: "[他] ①～について話し合う，議論する ②～を話題に出す" },
+            { id: 6, word: "blame", meaning: "[他] ～に責任があるとする" },
+            { id: 7, word: "argue", meaning: "[他] ①（that SV）～と主張する [自] ②（with ～）（～と）言い争う" },
+            { id: 8, word: "claim", meaning: "[他] ①（that SV）～と主張する ②～を要求する，主張する [名] ③主張，要求" },
+            { id: 9, word: "complain", meaning: "[自] ①文句を言う，苦情を言う ②（of ～）（病気などを）訴える" },
+            { id: 10, word: "offer", meaning: "[他] ①～を申し出る [名] ②申し出 ③値引き" },
+            { id: 11, word: "acknowledge", meaning: "[他] ①～（の事実）を認める ②～に謝意を表す" },
+            { id: 12, word: "alternative", meaning: "[名] ①代案，選択肢 [形] ②代わりの" },
+            { id: 13, word: "benefit", meaning: "[名] ①利益，恩恵 [他] ②～に利益を与える" },
+            { id: 14, word: "comprehensive", meaning: "[形] ①包括的な，広範囲にわたる ②理解力のある" },
+            { id: 15, word: "distinct", meaning: "[形] ①明確な，はっきりした ②（～と）全く異なる" },
+            { id: 16, word: "eliminate", meaning: "[他] ①～を排除する，除去する ②～（人）を脱落させる" },
+            { id: 17, word: "facilitate", meaning: "[他] ①～を容易にする，促進する" },
+            { id: 18, word: "guarantee", meaning: "[他] ①～を保証する [名] ②保証，約束" },
+            { id: 19, word: "implement", meaning: "[他] ①～を実行する，実施する [名] ②道具，用具" },
+            { id: 20, word: "justify", meaning: "[他] ①～を正当化する，弁明する" }
+        ];
+
+        // Web Audio API による効果音ジェネレーター
+        const playSFX = (type) => {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                const now = ctx.currentTime;
+                if (type === 'flip') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.exponentialRampToValueAtTime(800, now + 0.08);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'correct') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+                    osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'wrong') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(220, now); // A3
+                    osc.frequency.setValueAtTime(196, now + 0.1); // G3
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'click') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, now);
+                    gain.gain.setValueAtTime(0.05, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+                    osc.start(now);
+                    osc.stop(now + 0.03);
+                }
+            } catch (e) {
+                // Audio not allowed or failed
+            }
+        };
+
+        const App = () => {
+            const [cards, setCards] = useState([]);
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [isFlipped, setIsFlipped] = useState(false);
+            const [activeTab, setActiveTab] = useState('card'); // 'card', 'quiz', 'list', 'stats'
+            
+            // ブックマーク & 習得済み管理
+            const [bookmarks, setBookmarks] = useState(() => {
+                const saved = localStorage.getItem('leap_bookmarks_v2');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [mastered, setMastered] = useState(() => {
+                const saved = localStorage.getItem('leap_mastered_v2');
+                return saved ? JSON.parse(saved) : [];
+            });
+
+            // フィルター & 設定
+            const [onlyBookmarks, setOnlyBookmarks] = useState(false);
+            const [onlyUnmastered, setOnlyUnmastered] = useState(false);
+            const [direction, setDirection] = useState('en-ja'); // 'en-ja' (英→日) | 'ja-en' (日→英)
+            const [autoPlay, setAutoPlay] = useState(false);
+            const [speechRate, setSpeechRate] = useState(1.0);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [rangeStart, setRangeStart] = useState(1);
+            const [rangeEnd, setRangeEnd] = useState(2300);
+            const [toast, setToast] = useState(null);
+            const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+            // クイズ状態
+            const [quizOptions, setQuizOptions] = useState([]);
+            const [quizSelected, setQuizSelected] = useState(null);
+            const [quizScore, setQuizScore] = useState({ correct: 0, total: 0, streak: 0 });
+
+            // 音声合成 (TTS)
+            const speakWord = useCallback((text, e) => {
+                if (e) e.stopPropagation();
+                if (!('speechSynthesis' in window)) {
+                    showToast('お使いの環境は音声合成に対応していません', 'error');
+                    return;
+                }
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                utterance.rate = speechRate;
+                utterance.pitch = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }, [speechRate]);
+
+            const showToast = (message, type = 'info') => {
+                setToast({ message, type });
+                setTimeout(() => setToast(null), 3200);
+            };
+
+            // 初期ロード
+            useEffect(() => {
+                const savedCards = localStorage.getItem('leap_cards_v2');
+                if (savedCards) {
+                    try {
+                        const parsed = JSON.parse(savedCards);
+                        setCards(parsed);
+                        setRangeEnd(parsed.length);
+                    } catch (e) {
+                        setCards(DEFAULT_CARDS);
+                        setRangeEnd(DEFAULT_CARDS.length);
+                    }
+                } else {
+                    setCards(DEFAULT_CARDS);
+                    setRangeEnd(DEFAULT_CARDS.length);
+                }
+            }, []);
+
+            // 保存処理
+            useEffect(() => {
+                localStorage.setItem('leap_bookmarks_v2', JSON.stringify(bookmarks));
+            }, [bookmarks]);
+
+            useEffect(() => {
+                localStorage.setItem('leap_mastered_v2', JSON.stringify(mastered));
+            }, [mastered]);
+
+            const processParsedCards = (loadedList) => {
+                if (loadedList.length > 0) {
+                    setCards(loadedList);
+                    localStorage.setItem('leap_cards_v2', JSON.stringify(loadedList));
+                    setCurrentIndex(0);
+                    setRangeStart(1);
+                    setRangeEnd(loadedList.length);
+                    playSFX('correct');
+                    showToast(`✨ ${loadedList.length} 件の単語データを読み込みました！`, 'success');
+                } else {
+                    showToast('有効な単語データが見つかりませんでした', 'error');
+                }
+            };
+
+            const handleFile = (file) => {
+                if (!file) return;
+                const fileExt = file.name.split('.').pop().toLowerCase();
+
+                if (fileExt === 'json') {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const data = JSON.parse(e.target.result);
+                            let loadedList = [];
+                            if (Array.isArray(data)) {
+                                loadedList = data;
+                            } else if (data.flashcards) {
+                                loadedList = data.flashcards.map((c, i) => ({
+                                    id: i + 1,
+                                    word: c.front?.text || c.word,
+                                    meaning: c.back?.text || c.meaning
+                                }));
+                            }
+                            processParsedCards(loadedList);
+                        } catch (err) {
+                            showToast('JSONファイルの解析に失敗しました', 'error');
+                        }
+                    };
+                    reader.readAsText(file);
+                } else if (['xlsx', 'xls', 'csv'].includes(fileExt)) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const data = new Uint8Array(e.target.result);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                            const jsonRows = XLSX.utils.sheet_to_json(worksheet);
+
+                            const mappedCards = jsonRows.map((row, idx) => {
+                                const wordKey = Object.keys(row).find(k => k.includes('単語') || k.toLowerCase().includes('word') || k.toLowerCase().includes('front')) || Object.keys(row)[1] || Object.keys(row)[0];
+                                const meaningKey = Object.keys(row).find(k => k.includes('意味') || k.toLowerCase().includes('meaning') || k.toLowerCase().includes('back')) || Object.keys(row)[2] || Object.keys(row)[1];
+                                const idKey = Object.keys(row).find(k => k.toLowerCase() === 'no' || k.includes('番号')) || null;
+
+                                return {
+                                    id: idKey && row[idKey] ? Number(row[idKey]) : idx + 1,
+                                    word: String(row[wordKey] || '').trim(),
+                                    meaning: String(row[meaningKey] || '').trim()
+                                };
+                            }).filter(item => item.word);
+
+                            processParsedCards(mappedCards);
+                        } catch (err) {
+                            showToast('Excelファイルの読み込みに失敗しました', 'error');
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+            };
+
+            // ドラッグ＆ドロップイベント
+            const handleDragOver = (e) => { e.preventDefault(); setIsDraggingFile(true); };
+            const handleDragLeave = (e) => { e.preventDefault(); setIsDraggingFile(false); };
+            const handleDrop = (e) => {
+                e.preventDefault();
+                setIsDraggingFile(false);
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleFile(e.dataTransfer.files[0]);
+                }
+            };
+
+            const activeCards = useMemo(() => {
+                return cards.filter(card => {
+                    const inRange = card.id >= rangeStart && card.id <= rangeEnd;
+                    const isBookmarked = bookmarks.includes(card.id);
+                    const isMastered = mastered.includes(card.id);
+
+                    if (onlyBookmarks && !isBookmarked) return false;
+                    if (onlyUnmastered && isMastered) return false;
+                    return inRange;
+                });
+            }, [cards, rangeStart, rangeEnd, bookmarks, mastered, onlyBookmarks, onlyUnmastered]);
+
+            // 日→英モード用：先頭の文字だけ見せ、残りは伏字にするヒントを生成
+            const getFirstLetterHint = (word) => {
+                if (!word) return '';
+                return word
+                    .split('')
+                    .map((ch, i) => {
+                        if (ch === ' ') return '  ';
+                        if (ch === '-') return '-';
+                        return i === 0 ? ch.toUpperCase() : '_';
+                    })
+                    .join(' ');
+            };
+
+            const currentCard = activeCards[currentIndex] || activeCards[0] || null;
+
+            // 範囲・フィルタ変更時はカード位置を先頭に戻す（表示中カードの不整合を防止）
+            useEffect(() => {
+                setCurrentIndex(0);
+                setIsFlipped(false);
+            }, [rangeStart, rangeEnd, onlyBookmarks, onlyUnmastered, direction]);
+
+            // キーボード操作対応
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+                    if (activeTab === 'card' && currentCard) {
+                        if (e.code === 'Space') {
+                            e.preventDefault();
+                            setIsFlipped(prev => !prev);
+                            playSFX('flip');
+                        } else if (e.code === 'ArrowRight') {
+                            nextCard();
+                        } else if (e.code === 'ArrowLeft') {
+                            prevCard();
+                        } else if (e.key.toLowerCase() === 's') {
+                            speakWord(currentCard.word);
+                        } else if (e.key.toLowerCase() === 'b') {
+                            toggleBookmark(currentCard.id);
+                        } else if (e.key.toLowerCase() === 'm') {
+                            toggleMastered(currentCard.id);
+                        }
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [activeTab, currentCard, activeCards.length]);
+
+            // 自動再生タイマー
+            useEffect(() => {
+                let timer;
+                if (autoPlay && activeCards.length > 0) {
+                    timer = setInterval(() => {
+                        setIsFlipped(prev => {
+                            if (!prev) {
+                                playSFX('flip');
+                                return true;
+                            } else {
+                                setCurrentIndex(idx => (idx + 1) % activeCards.length);
+                                return false;
+                            }
+                        });
+                    }, 2800);
+                }
+                return () => clearInterval(timer);
+            }, [autoPlay, activeCards.length]);
+
+            const toggleBookmark = (id, e) => {
+                if (e) e.stopPropagation();
+                playSFX('click');
+                setBookmarks(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+            };
+
+            const toggleMastered = (id, e) => {
+                if (e) e.stopPropagation();
+                playSFX('click');
+                setMastered(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+            };
+
+            const handleShuffle = () => {
+                playSFX('click');
+                const shuffled = [...cards].sort(() => Math.random() - 0.5);
+                setCards(shuffled);
+                setCurrentIndex(0);
+                setIsFlipped(false);
+                showToast('🔀 単語の順序をシャッフルしました');
+            };
+
+            const nextCard = () => {
+                playSFX('click');
+                setIsFlipped(false);
+                setTimeout(() => {
+                    setCurrentIndex(prev => (prev + 1) % activeCards.length);
+                }, 100);
+            };
+
+            const prevCard = () => {
+                playSFX('click');
+                setIsFlipped(false);
+                setTimeout(() => {
+                    setCurrentIndex(prev => (prev - 1 + activeCards.length) % activeCards.length);
+                }, 100);
+            };
+
+            const setupQuiz = () => {
+                if (activeCards.length < 4) return;
+                const correctIdx = Math.floor(Math.random() * activeCards.length);
+                const correctCard = activeCards[correctIdx];
+                setCurrentIndex(correctIdx);
+
+                const wrongCandidates = activeCards.filter(c => c.id !== correctCard.id);
+                const shuffledWrong = [...wrongCandidates].sort(() => Math.random() - 0.5).slice(0, 3);
+                const options = [...shuffledWrong, correctCard].sort(() => Math.random() - 0.5);
+
+                setQuizOptions(options);
+                setQuizSelected(null);
+            };
+
+            useEffect(() => {
+                if (activeTab === 'quiz' && activeCards.length >= 4) {
+                    setupQuiz();
+                }
+            }, [activeTab, rangeStart, rangeEnd, onlyBookmarks, onlyUnmastered, direction]);
+
+            const handleQuizAnswer = (option) => {
+                if (quizSelected !== null) return;
+                setQuizSelected(option);
+                const isCorrect = option.id === currentCard.id;
+
+                if (isCorrect) {
+                    playSFX('correct');
+                    setQuizScore(prev => ({
+                        correct: prev.correct + 1,
+                        total: prev.total + 1,
+                        streak: prev.streak + 1
+                    }));
+                } else {
+                    playSFX('wrong');
+                    setQuizScore(prev => ({
+                        ...prev,
+                        total: prev.total + 1,
+                        streak: 0
+                    }));
+                }
+            };
+
+            return (
+                <div 
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className="min-h-screen flex flex-col justify-between items-center p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto relative z-10"
+                >
+                    {/* File Drag Overlay */}
+                    {isDraggingFile && (
+                        <div className="fixed inset-0 bg-indigo-950/90 backdrop-blur-md z-50 flex flex-col items-center justify-center border-4 border-dashed border-cyan-400 p-8 text-center animate-pulse">
+                            <i className="fas fa-file-excel text-7xl text-cyan-400 mb-6 animate-bounce"></i>
+                            <h2 className="text-3xl font-black text-white mb-2">Excel / JSON ファイルをドロップ！</h2>
+                            <p className="text-cyan-200">単語リストを自動で読み込みます</p>
+                        </div>
+                    )}
+
+                    {/* Toast Notification */}
+                    {toast && (
+                        <div className={`fixed top-6 z-50 px-6 py-3.5 rounded-2xl shadow-2xl flex items-center space-x-3 border backdrop-blur-xl transition-all duration-300 animate-bounce ${
+                            toast.type === 'success' ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200 neon-border-emerald' :
+                            toast.type === 'error' ? 'bg-rose-950/80 border-rose-500/50 text-rose-200 neon-border-rose' :
+                            'bg-indigo-950/80 border-indigo-500/50 text-indigo-200 neon-border-indigo'
+                        }`}>
+                            <i className={`fas ${toast.type === 'success' ? 'fa-check-circle text-emerald-400' : toast.type === 'error' ? 'fa-exclamation-triangle text-rose-400' : 'fa-info-circle text-indigo-400'} text-lg`}></i>
+                            <span className="text-sm font-bold tracking-wide">{toast.message}</span>
+                        </div>
+                    )}
+
+                    {/* Top Header */}
+                    <header className="w-full flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-12 h-12 bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-400 rounded-2xl flex items-center justify-center font-black text-2xl text-white shadow-lg shadow-indigo-500/30 border border-white/20">
+                                L
+                            </div>
+                            <div>
+                                <div className="flex items-center space-x-2">
+                                    <h1 className="text-2xl sm:text-3xl font-black tracking-wider bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent font-mono">
+                                        LEAP VOCAB
+                                    </h1>
+                                    <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full border border-indigo-500/30">
+                                        PRO v2.5
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-400 font-mono">NEXT-GEN FLASHCARD ENGINE</p>
+                            </div>
+                        </div>
+
+                        {/* File Upload Button */}
+                        <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
+                            <label className="cursor-pointer bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 border border-slate-600/50 hover:border-cyan-400 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center space-x-2.5 transition-all shadow-lg hover:shadow-cyan-500/20 active:scale-95 group">
+                                <i className="fas fa-file-excel text-emerald-400 text-base group-hover:scale-110 transition-transform"></i>
+                                <span>Excel (.xlsx) / JSON 読込</span>
+                                <input 
+                                    type="file" 
+                                    accept=".xlsx, .xls, .csv, .json" 
+                                    onChange={(e) => e.target.files && handleFile(e.target.files[0])} 
+                                    className="hidden" 
+                                />
+                            </label>
+                        </div>
+                    </header>
+
+                    {/* Navigation Tabs */}
+                    <nav className="w-full max-w-xl glass-panel p-1.5 rounded-2xl mb-6 flex items-center shadow-2xl border border-white/10">
+                        {[
+                            { id: 'card', label: 'カード学習', icon: 'fa-clone' },
+                            { id: 'quiz', label: '4択テスト', icon: 'fa-bolt' },
+                            { id: 'list', label: '単語一覧', icon: 'fa-table-list' },
+                            { id: 'stats', label: '進捗分析', icon: 'fa-chart-pie' }
+                        ].map((tab) => (
+                            <button
+                                key={tab.id}
+                                onClick={() => { playSFX('click'); setActiveTab(tab.id); }}
+                                className={`flex-1 py-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all duration-300 flex items-center justify-center space-x-2 ${
+                                    activeTab === tab.id
+                                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/30 border border-white/20 scale-[1.02]'
+                                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                                }`}
+                            >
+                                <i className={`fas ${tab.icon} ${activeTab === tab.id ? 'text-cyan-300' : 'text-slate-500'}`}></i>
+                                <span>{tab.label}</span>
+                            </button>
+                        ))}
+                    </nav>
+
+                    {/* Filter & Range Bar */}
+                    <div className="w-full glass-panel rounded-2xl p-4 mb-6 border border-slate-700/50 flex flex-wrap gap-4 items-center justify-between text-xs">
+                        <div className="flex items-center space-x-2 font-mono">
+                            <span className="text-slate-400 font-bold">範囲:</span>
+                            <input 
+                                type="number" 
+                                min="1" 
+                                max={cards.length || 1} 
+                                value={rangeStart} 
+                                onChange={(e) => setRangeStart(Math.max(1, Number(e.target.value)))}
+                                className="w-16 bg-slate-900/90 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1 text-center font-bold text-indigo-400 focus:outline-none"
+                            />
+                            <span className="text-slate-600">～</span>
+                            <input 
+                                type="number" 
+                                min="1" 
+                                max={cards.length || 1} 
+                                value={rangeEnd} 
+                                onChange={(e) => setRangeEnd(Math.min(cards.length, Number(e.target.value)))}
+                                className="w-16 bg-slate-900/90 border border-slate-700 focus:border-indigo-500 rounded-lg px-2 py-1 text-center font-bold text-indigo-400 focus:outline-none"
+                            />
+                            <span className="text-slate-500 font-sans">/ 全{cards.length}語</span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button 
+                                onClick={() => { playSFX('click'); setOnlyBookmarks(!onlyBookmarks); }} 
+                                className={`px-3 py-1.5 rounded-xl border font-bold flex items-center space-x-1.5 transition-all ${
+                                    onlyBookmarks 
+                                        ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-lg shadow-amber-500/10' 
+                                        : 'border-slate-700 text-slate-400 hover:border-slate-500 hover:bg-slate-800/50'
+                                }`}
+                            >
+                                <i className={`fas fa-star ${onlyBookmarks ? 'text-amber-400' : 'text-slate-500'}`}></i>
+                                <span>要復習 ({bookmarks.length})</span>
+                            </button>
+
+                            <button 
+                                onClick={() => { playSFX('click'); setOnlyUnmastered(!onlyUnmastered); }} 
+                                className={`px-3 py-1.5 rounded-xl border font-bold flex items-center space-x-1.5 transition-all ${
+                                    onlyUnmastered 
+                                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-lg shadow-cyan-500/10' 
+                                        : 'border-slate-700 text-slate-400 hover:border-slate-500 hover:bg-slate-800/50'
+                                }`}
+                            >
+                                <i className={`fas fa-eye ${onlyUnmastered ? 'text-cyan-400' : 'text-slate-500'}`}></i>
+                                <span>未修得のみ ({cards.length - mastered.length})</span>
+                            </button>
+
+                            <button 
+                                onClick={handleShuffle}
+                                className="px-3 py-1.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-700/60 hover:border-slate-500 font-bold transition flex items-center space-x-1.5 active:scale-95"
+                            >
+                                <i className="fas fa-shuffle text-indigo-400"></i>
+                                <span>シャッフル</span>
+                            </button>
+
+                            <button 
+                                onClick={() => {
+                                    playSFX('click');
+                                    setDirection(prev => prev === 'en-ja' ? 'ja-en' : 'en-ja');
+                                    setIsFlipped(false);
+                                    setQuizSelected(null);
+                                }}
+                                title="出題方向を切り替え"
+                                className="px-3 py-1.5 rounded-xl border font-bold flex items-center space-x-1.5 transition-all bg-purple-500/10 border-purple-500/50 text-purple-300 hover:bg-purple-500/20"
+                            >
+                                <i className="fas fa-right-left text-purple-300"></i>
+                                <span>{direction === 'en-ja' ? '英 → 日' : '日 → 英'}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* MAIN CONTENT CANVAS */}
+                    {activeCards.length === 0 ? (
+                        <div className="w-full flex-1 glass-panel rounded-3xl p-12 text-center flex flex-col items-center justify-center my-8">
+                            <div className="w-20 h-20 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-3xl mb-4 animate-float">
+                                <i className="fas fa-filter"></i>
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-200 mb-2">条件に一致する単語が見つかりません</h3>
+                            <p className="text-xs text-slate-400 max-w-md mb-6">範囲指定を変更するか、フィルター設定（要復習・未修得）を解除してください。</p>
+                            <button 
+                                onClick={() => { setOnlyBookmarks(false); setOnlyUnmastered(false); }}
+                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-indigo-600/30"
+                            >
+                                フィルターをリセット
+                            </button>
+                        </div>
+                    ) : (
+                        <main className="w-full flex-1 flex flex-col items-center justify-center">
+
+                            {}
+                            {activeTab === 'card' && currentCard && (
+                                <div className="w-full max-w-xl flex flex-col items-center">
+                                    
+                                    {/* 3D Flashcard */}
+                                    <div 
+                                        className="relative w-full h-80 sm:h-96 perspective-1000 cursor-pointer group mb-6"
+                                        onClick={() => { setIsFlipped(!isFlipped); playSFX('flip'); }}
+                                    >
+                                        <div className={`relative w-full h-full transition-transform-600 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
+                                            
+                                            {/* FRONT SURFACE */}
+                                            <div className="absolute w-full h-full backface-hidden glass-card rounded-3xl p-6 sm:p-8 flex flex-col justify-between items-center text-center border border-white/10 group-hover:border-indigo-500/50 transition-all duration-300">
+                                                
+                                                {/* Top Status */}
+                                                <div className="w-full flex justify-between items-center text-xs">
+                                                    <div className="flex items-center space-x-2">
+                                                        <span className="font-mono text-indigo-400 bg-indigo-950/80 px-3 py-1 rounded-full border border-indigo-500/30 font-bold">
+                                                            #{currentCard.id}
+                                                        </span>
+                                                        <span className="bg-indigo-500/10 text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-500/20 font-mono">
+                                                            {direction === 'en-ja' ? 'WORD' : '意味'}
+                                                        </span>
+                                                        {mastered.includes(currentCard.id) && (
+                                                            <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                                                習得済み
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex items-center space-x-2">
+                                                        <button 
+                                                            onClick={(e) => speakWord(currentCard.word, e)}
+                                                            className="w-10 h-10 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 border border-indigo-500/30 flex items-center justify-center transition active:scale-90"
+                                                            title="音声発音 (S)"
+                                                        >
+                                                            <i className="fas fa-volume-high text-base"></i>
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => toggleBookmark(currentCard.id, e)}
+                                                            className={`w-10 h-10 rounded-xl border flex items-center justify-center transition active:scale-90 ${
+                                                                bookmarks.includes(currentCard.id)
+                                                                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                                                                    : 'bg-slate-800/60 border-slate-700 text-slate-500 hover:text-slate-300'
+                                                            }`}
+                                                            title="要復習ブックマーク (B)"
+                                                        >
+                                                            <i className="fas fa-star text-base"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Front Display: 英→日なら単語、日→英なら意味 */}
+                                                <div className="my-auto px-4">
+                                                    {direction === 'en-ja' ? (
+                                                        <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-wide text-white mb-3 font-mono drop-shadow-md">
+                                                            {currentCard.word}
+                                                        </h2>
+                                                    ) : (
+                                                        <div>
+                                                            <p className="text-xl sm:text-2xl font-bold leading-relaxed text-white tracking-wide mb-4">
+                                                                {currentCard.meaning}
+                                                            </p>
+                                                            <div className="inline-flex flex-col items-center space-y-1.5">
+                                                                <span className="text-[10px] font-mono text-cyan-400/80 tracking-widest">HINT</span>
+                                                                <span className="text-2xl sm:text-3xl font-black font-mono text-cyan-300 tracking-[0.2em] drop-shadow-md">
+                                                                    {getFirstLetterHint(currentCard.word)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Hint / Flip prompt */}
+                                                <div className="text-slate-400 text-xs flex items-center space-x-2 font-mono bg-slate-900/60 px-4 py-1.5 rounded-full border border-slate-800">
+                                                    <i className="fas fa-hand-pointer text-indigo-400 animate-pulse"></i>
+                                                    <span>クリック または Spaceキー で裏面を表示</span>
+                                                </div>
+                                            </div>
+
+                                            {/* BACK SURFACE */}
+                                            <div className="absolute w-full h-full backface-hidden glass-card-back rounded-3xl p-6 sm:p-8 flex flex-col justify-between items-center text-center rotate-y-180 border border-purple-500/30">
+                                                
+                                                <div className="w-full flex justify-between items-center text-xs">
+                                                    <span className="font-mono text-purple-300 bg-purple-950/80 px-3 py-1 rounded-full border border-purple-500/30 font-bold">
+                                                        {direction === 'en-ja' ? 'MEANING' : 'WORD'}
+                                                    </span>
+
+                                                    <button 
+                                                        onClick={(e) => toggleMastered(currentCard.id, e)}
+                                                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center space-x-1.5 ${
+                                                            mastered.includes(currentCard.id)
+                                                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                                                                : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-emerald-500/50'
+                                                        }`}
+                                                    >
+                                                        <i className={`fas fa-check-circle ${mastered.includes(currentCard.id) ? 'text-emerald-400' : ''}`}></i>
+                                                        <span>{mastered.includes(currentCard.id) ? '習得済み' : '習得に指定 (M)'}</span>
+                                                    </button>
+                                                </div>
+
+                                                {/* Back Display: 英→日なら意味、日→英なら単語 */}
+                                                <div className="my-auto px-2">
+                                                    {direction === 'en-ja' ? (
+                                                        <p className="text-xl sm:text-2xl font-bold leading-relaxed text-purple-100 tracking-wide">
+                                                            {currentCard.meaning}
+                                                        </p>
+                                                    ) : (
+                                                        <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-wide text-purple-100 font-mono drop-shadow-md">
+                                                            {currentCard.word}
+                                                        </h2>
+                                                    )}
+                                                </div>
+
+                                                <div className="text-purple-300/60 text-xs font-mono">
+                                                    ID: #{currentCard.id} • {currentCard.word}
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                    </div>
+
+                                    {/* Primary Controls */}
+                                    <div className="flex items-center space-x-6 mb-6">
+                                        <button 
+                                            onClick={prevCard}
+                                            className="w-14 h-14 rounded-2xl glass-panel border border-slate-700/80 hover:border-indigo-500 text-indigo-400 hover:text-white flex items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95 group"
+                                        >
+                                            <i className="fas fa-arrow-left text-xl group-hover:-translate-x-1 transition-transform"></i>
+                                        </button>
+
+                                        <div className="text-center min-w-[120px]">
+                                            <div className="text-3xl font-black font-mono text-white">
+                                                <span className="text-indigo-400">{currentIndex + 1}</span>
+                                                <span className="text-slate-600 mx-1.5">/</span>
+                                                <span className="text-slate-400">{activeCards.length}</span>
+                                            </div>
+                                        </div>
+
+                                        <button 
+                                            onClick={nextCard}
+                                            className="w-14 h-14 rounded-2xl glass-panel border border-slate-700/80 hover:border-indigo-500 text-indigo-400 hover:text-white flex items-center justify-center transition-all shadow-xl hover:scale-105 active:scale-95 group"
+                                        >
+                                            <i className="fas fa-arrow-right text-xl group-hover:translate-x-1 transition-transform"></i>
+                                        </button>
+                                    </div>
+
+                                    {/* Secondary Control Tools */}
+                                    <div className="flex flex-wrap items-center justify-center gap-3 text-xs">
+                                        <button 
+                                            onClick={() => { playSFX('click'); setAutoPlay(!autoPlay); }} 
+                                            className={`px-4 py-2 rounded-xl border font-bold flex items-center space-x-2 transition-all ${
+                                                autoPlay 
+                                                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-lg shadow-emerald-500/10' 
+                                                    : 'glass-panel border-slate-700 text-slate-400 hover:bg-slate-800/80'
+                                            }`}
+                                        >
+                                            <i className={`fas ${autoPlay ? 'fa-pause text-emerald-400 animate-pulse' : 'fa-play'}`}></i>
+                                            <span>自動再生 {autoPlay ? 'ON' : 'OFF'}</span>
+                                        </button>
+
+                                        <div className="flex items-center space-x-2 glass-panel px-3.5 py-2 rounded-xl border border-slate-700/80">
+                                            <i className="fas fa-gauge-high text-indigo-400"></i>
+                                            <span className="text-slate-400 font-mono">速度:</span>
+                                            <select 
+                                                value={speechRate} 
+                                                onChange={(e) => setSpeechRate(Number(e.target.value))}
+                                                className="bg-transparent text-indigo-300 font-mono font-bold outline-none cursor-pointer"
+                                            >
+                                                <option value="0.8" className="bg-slate-900">0.8x</option>
+                                                <option value="1.0" className="bg-slate-900">1.0x</option>
+                                                <option value="1.2" className="bg-slate-900">1.2x</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            )}
+
+                            {}
+                            {activeTab === 'quiz' && currentCard && (
+                                <div className="w-full max-w-xl glass-panel rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-700/80 relative overflow-hidden">
+                                    <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-4">
+                                        <div className="flex items-center space-x-2">
+                                            <span className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></span>
+                                            <span className="text-xs font-mono font-extrabold text-cyan-400">
+                                                QUIZ CHALLENGE
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center space-x-4 text-xs font-mono">
+                                            <div className="text-slate-400">
+                                                SCORE: <span className="text-emerald-400 font-bold text-sm">{quizScore.correct}</span> / {quizScore.total}
+                                            </div>
+                                            <div className="bg-purple-950/80 border border-purple-500/30 text-purple-300 px-2.5 py-1 rounded-full font-bold flex items-center space-x-1">
+                                                <i className="fas fa-fire text-amber-400"></i>
+                                                <span>STREAK: {quizScore.streak}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Question Header: 英→日なら単語を出題、日→英なら意味を出題 */}
+                                    <div className="text-center py-8 mb-6 bg-slate-900/80 rounded-2xl border border-slate-800/80 relative">
+                                        <span className="text-[10px] font-mono text-slate-500 absolute top-3 left-4">#{currentCard.id}</span>
+                                        {direction === 'en-ja' ? (
+                                            <h3 className="text-4xl font-black text-white font-mono mb-2">{currentCard.word}</h3>
+                                        ) : (
+                                            <p className="text-lg sm:text-xl font-bold text-white leading-relaxed px-6 mb-2">{currentCard.meaning}</p>
+                                        )}
+                                        {/* 日→英モードは解答前に単語の発音が答えを漏らしてしまうため、解答後のみ表示 */}
+                                        {(direction === 'en-ja' || quizSelected !== null) && (
+                                            <button 
+                                                onClick={(e) => speakWord(currentCard.word, e)}
+                                                className="text-xs text-indigo-400 hover:text-indigo-300 font-bold inline-flex items-center space-x-1.5 transition"
+                                            >
+                                                <i className="fas fa-volume-high"></i>
+                                                <span>発音を聞く</span>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Options Grid */}
+                                    <div className="space-y-3 mb-6">
+                                        {quizOptions.map((opt, idx) => {
+                                            let btnStyle = "bg-slate-800/70 border-slate-700/80 text-slate-200 hover:border-indigo-500/80 hover:bg-slate-800";
+                                            if (quizSelected !== null) {
+                                                if (opt.id === currentCard.id) {
+                                                    btnStyle = "bg-emerald-950/80 border-emerald-500 text-emerald-200 font-bold neon-border-emerald";
+                                                } else if (opt.id === quizSelected.id) {
+                                                    btnStyle = "bg-rose-950/80 border-rose-500 text-rose-200 neon-border-rose";
+                                                } else {
+                                                    btnStyle = "bg-slate-900/40 border-slate-900 text-slate-600 opacity-50";
+                                                }
+                                            }
+
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => handleQuizAnswer(opt)}
+                                                    className={`w-full text-left p-4 rounded-2xl border text-sm transition-all duration-200 flex items-center justify-between ${btnStyle}`}
+                                                >
+                                                    <span className="font-medium leading-relaxed">{direction === 'en-ja' ? opt.meaning : opt.word}</span>
+                                                    {quizSelected !== null && opt.id === currentCard.id && (
+                                                        <i className="fas fa-check-circle text-emerald-400 text-lg ml-2"></i>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Next Quiz Action */}
+                                    {quizSelected !== null && (
+                                        <button 
+                                            onClick={() => { playSFX('click'); setupQuiz(); }}
+                                            className="w-full py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-500 hover:opacity-90 text-white font-extrabold rounded-2xl shadow-xl transition-all flex items-center justify-center space-x-2 text-sm tracking-wider active:scale-98"
+                                        >
+                                            <span>次のクイズへ進む</span>
+                                            <i className="fas fa-arrow-right"></i>
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {}
+                            {activeTab === 'list' && (
+                                <div className="w-full max-w-2xl glass-panel rounded-3xl p-6 shadow-2xl border border-slate-700/80">
+                                    {/* Search Input */}
+                                    <div className="relative mb-4">
+                                        <i className="fas fa-search absolute left-4 top-3.5 text-slate-500"></i>
+                                        <input 
+                                            type="text" 
+                                            placeholder="英単語または意味で検索..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="w-full bg-slate-900/90 border border-slate-700/80 focus:border-indigo-500 rounded-2xl pl-11 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-all font-mono"
+                                        />
+                                    </div>
+
+                                    {/* List Scroll Area */}
+                                    <div className="max-h-[500px] overflow-y-auto space-y-2.5 pr-1">
+                                        {activeCards
+                                            .filter(c => c.word.toLowerCase().includes(searchQuery.toLowerCase()) || c.meaning.includes(searchQuery))
+                                            .map((card) => {
+                                                const isBookmarked = bookmarks.includes(card.id);
+                                                const isMastered = mastered.includes(card.id);
+
+                                                return (
+                                                    <div 
+                                                        key={card.id} 
+                                                        className={`p-4 bg-slate-900/80 rounded-2xl border transition-all flex items-center justify-between ${
+                                                            isMastered ? 'border-emerald-500/30 bg-emerald-950/10' : 'border-slate-800 hover:border-slate-700'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center space-x-4">
+                                                            <span className="text-xs font-mono font-bold text-slate-500 w-10">#{card.id}</span>
+                                                            <div>
+                                                                <div className="flex items-center space-x-2">
+                                                                    <h4 className="text-lg font-extrabold text-white font-mono">{card.word}</h4>
+                                                                    <button 
+                                                                        onClick={(e) => speakWord(card.word, e)}
+                                                                        className="text-xs text-indigo-400 hover:text-indigo-300"
+                                                                    >
+                                                                        <i className="fas fa-volume-high"></i>
+                                                                    </button>
+                                                                    {isMastered && (
+                                                                        <span className="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                                                            習得済み
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-xs text-slate-400 mt-1 leading-relaxed">{card.meaning}</p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center space-x-2">
+                                                            <button 
+                                                                onClick={(e) => toggleBookmark(card.id, e)}
+                                                                className={`p-2 rounded-xl transition ${isBookmarked ? 'text-amber-400 bg-amber-500/10' : 'text-slate-600 hover:text-slate-400'}`}
+                                                            >
+                                                                <i className="fas fa-star text-base"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {}
+                            {activeTab === 'stats' && (
+                                <div className="w-full max-w-xl glass-panel rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-700/80">
+                                    <h3 className="text-lg font-bold text-white mb-6 flex items-center space-x-2">
+                                        <i className="fas fa-chart-pie text-indigo-400"></i>
+                                        <span>学習進捗アナリティクス</span>
+                                    </h3>
+
+                                    <div className="grid grid-cols-2 gap-4 mb-6">
+                                        <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 text-center">
+                                            <span className="text-xs text-slate-400 block mb-1">総登録単語</span>
+                                            <span className="text-3xl font-black font-mono text-white">{cards.length}</span>
+                                        </div>
+                                        <div className="bg-slate-900/80 p-5 rounded-2xl border border-emerald-500/30 text-center">
+                                            <span className="text-xs text-emerald-400 block mb-1">習得済み単語</span>
+                                            <span className="text-3xl font-black font-mono text-emerald-400">{mastered.length}</span>
+                                        </div>
+                                        <div className="bg-slate-900/80 p-5 rounded-2xl border border-amber-500/30 text-center">
+                                            <span className="text-xs text-amber-400 block mb-1">要復習リスト</span>
+                                            <span className="text-3xl font-black font-mono text-amber-400">{bookmarks.length}</span>
+                                        </div>
+                                        <div className="bg-slate-900/80 p-5 rounded-2xl border border-cyan-500/30 text-center">
+                                            <span className="text-xs text-cyan-400 block mb-1">未修得単語</span>
+                                            <span className="text-3xl font-black font-mono text-cyan-400">{cards.length - mastered.length}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Progress Bar */}
+                                    <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 mb-6">
+                                        <div className="flex justify-between items-center text-xs font-mono mb-2">
+                                            <span className="text-slate-400">習得達成率</span>
+                                            <span className="text-emerald-400 font-bold">
+                                                {cards.length ? Math.round((mastered.length / cards.length) * 100) : 0}%
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                                            <div 
+                                                className="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 h-full rounded-full transition-all duration-500"
+                                                style={{ width: `${cards.length ? (mastered.length / cards.length) * 100 : 0}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Reset Data Button */}
+                                    <div className="text-center">
+                                        <button 
+                                            onClick={() => {
+                                                if (window.confirm('すべての学習記録・保存データを初期化しますか？')) {
+                                                    localStorage.removeItem('leap_bookmarks_v2');
+                                                    localStorage.removeItem('leap_mastered_v2');
+                                                    localStorage.removeItem('leap_cards_v2');
+                                                    setBookmarks([]);
+                                                    setMastered([]);
+                                                    setCards(DEFAULT_CARDS);
+                                                    setRangeStart(1);
+                                                    setRangeEnd(DEFAULT_CARDS.length);
+                                                    showToast('データを初期化しました');
+                                                }
+                                            }}
+                                            className="text-xs text-rose-400 hover:text-rose-300 font-mono transition"
+                                        >
+                                            <i className="fas fa-trash-can mr-1"></i>
+                                            学習履歴データを初期化する
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                        </main>
+                    )}
+
+                    {/* Footer */}
+                    <footer className="w-full text-center mt-8 text-xs text-slate-600 font-mono flex flex-col items-center justify-center space-y-1">
+                        <div>Leap Vocab Master Pro &copy; 2026 • Cybernetic Learning System</div>
+                        <div className="text-[10px] text-slate-700">ショートカット: [Space] フリップ • [←/→] 移動 • [S] 発音 • [B] ブックマーク • [M] 習得</div>
+                    </footer>
+
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
